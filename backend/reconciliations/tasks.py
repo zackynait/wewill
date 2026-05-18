@@ -475,9 +475,29 @@ def _compare_price_fields(line1: Dict, line2: Dict, idx1: int, idx2: int) -> Opt
     price2 = line2.get('unit_price')  # Actual price from confirmation
     
     if price1 is not None and price2 is not None:
-        if price1 != price2:
-            delta = price2 - price1  # Positive = price increased, Negative = price decreased
-            delta_percent = (delta / price1) * 100 if price1 != 0 else 0
+        # Handle string prices
+        try:
+            price1_num = float(price1) if isinstance(price1, str) else price1
+            price2_num = float(price2) if isinstance(price2, str) else price2
+        except (ValueError, TypeError):
+            # If conversion fails, just compare as strings
+            if price1 != price2:
+                return {
+                    'type': DiscrepancyType.CHANGED,
+                    'line_number_doc1': idx1 + 1,
+                    'line_number_doc2': idx2 + 1,
+                    'field_name': 'unit_price',
+                    'doc1_value': str(price1),
+                    'doc2_value': str(price2),
+                    'delta_absolute': None,
+                    'delta_percent': None,
+                    'description': f"Price difference (reference: {price1}, actual: {price2})"
+                }
+            return None
+        
+        if price1_num != price2_num:
+            delta = price2_num - price1_num  # Positive = price increased, Negative = price decreased
+            delta_percent = (delta / price1_num) * 100 if price1_num != 0 else 0
             
             return {
                 'type': DiscrepancyType.CHANGED,
@@ -489,6 +509,27 @@ def _compare_price_fields(line1: Dict, line2: Dict, idx1: int, idx2: int) -> Opt
                 'delta_absolute': delta,
                 'delta_percent': delta_percent,
                 'description': f"Price deviation: {delta_percent:+.2f}% (reference: {price1}, actual: {price2})"
+            }
+    
+    # Compare validity dates if present
+    valid_from1 = line1.get('valid_from')
+    valid_to1 = line1.get('valid_to')
+    valid_from2 = line2.get('valid_from')
+    valid_to2 = line2.get('valid_to')
+    
+    if valid_from1 or valid_to1 or valid_from2 or valid_to2:
+        # Check if validity periods differ
+        if valid_from1 != valid_from2 or valid_to1 != valid_to2:
+            return {
+                'type': DiscrepancyType.CHANGED,
+                'line_number_doc1': idx1 + 1,
+                'line_number_doc2': idx2 + 1,
+                'field_name': 'validity_period',
+                'doc1_value': f"{valid_from1} - {valid_to1}",
+                'doc2_value': f"{valid_from2} - {valid_to2}",
+                'delta_absolute': None,
+                'delta_percent': None,
+                'description': f"Validity period differs (reference: {valid_from1}-{valid_to1}, actual: {valid_from2}-{valid_to2})"
             }
     
     return None

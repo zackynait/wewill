@@ -16,6 +16,37 @@ logger = logging.getLogger(__name__)
 class CSVProcessor:
     """Processor for CSV/Excel documents with automatic format detection."""
     
+    # Column name mappings (IT → EN)
+    COLUMN_MAPPINGS = {
+        # Italian
+        'codice': 'code',
+        'codice articolo': 'code',
+        'descrizione': 'description',
+        'quantità': 'quantity',
+        'qty': 'quantity',
+        'prezzo': 'unit_price',
+        'prezzo unitario': 'unit_price',
+        'sconto': 'discount',
+        'totale': 'total',
+        'importo': 'total',
+        'data consegna': 'delivery_week',
+        'unità': 'unit',
+        # English
+        'code': 'code',
+        'item code': 'code',
+        'sku': 'code',
+        'description': 'description',
+        'item': 'description',
+        'quantity': 'quantity',
+        'unit price': 'unit_price',
+        'price': 'unit_price',
+        'discount': 'discount',
+        'total': 'total',
+        'amount': 'total',
+        'delivery week': 'delivery_week',
+        'unit': 'unit',
+    }
+    
     def __init__(self):
         pass
     
@@ -66,6 +97,9 @@ class CSVProcessor:
             # Read with detected header
             df = pd.read_csv(file_path, sep=sep, encoding='utf-8', header=header_row)
             
+            # Normalize column names (IT → EN)
+            df = self._normalize_column_names(df)
+            
             # Normalize numeric formats
             df = self._normalize_numeric_columns(df)
             
@@ -93,6 +127,9 @@ class CSVProcessor:
                 
                 # Read with detected header
                 df = pd.read_excel(excel_file, sheet_name=sheet_name, header=header_row)
+                
+                # Normalize column names (IT → EN)
+                df = self._normalize_column_names(df)
                 
                 # Normalize numeric formats
                 df = self._normalize_numeric_columns(df)
@@ -122,6 +159,21 @@ class CSVProcessor:
                 best_row = idx
         
         return best_row
+    
+    def _normalize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize column names to standard English names using IT/EN mapping."""
+        new_columns = {}
+        
+        for col in df.columns:
+            col_lower = str(col).lower().strip()
+            # Remove special characters
+            col_clean = re.sub(r'[^\w\s]', '', col_lower)
+            # Map to standard name
+            standard_name = self.COLUMN_MAPPINGS.get(col_clean, col_clean)
+            new_columns[col] = standard_name
+        
+        df = df.rename(columns=new_columns)
+        return df
     
     def _normalize_numeric_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize numeric formats (IT: 1.234,56 vs EN: 1,234.56)."""

@@ -38,6 +38,18 @@ class Document(TenantMixin):
     processed_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Processed At'))
     extracted_data = models.JSONField(null=True, blank=True, verbose_name=_('Extracted Data'))
     error_message = models.TextField(null=True, blank=True, verbose_name=_('Error Message'))
+    source = models.CharField(
+        max_length=50,
+        default='dashboard',
+        verbose_name=_('Source'),
+        help_text=_('Source of the document: dashboard, whatsapp, email, webhook, etc.')
+    )
+    source_metadata = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name=_('Source Metadata'),
+        help_text=_('Additional metadata from the source (phone number, email, etc.)')
+    )
     
     class Meta:
         db_table = 'documents'

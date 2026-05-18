@@ -4,29 +4,113 @@ Sistema multi-tenant per la riconciliazione automatica di documenti (PDF, CSV/Ex
 
 ## Architettura
 
+### Diagramma Mermaid
+
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        UI[Next.js Dashboard]
+        Auth[JWT Auth Client]
+    end
+    
+    subgraph "API Gateway"
+        NGINX[Nginx Reverse Proxy]
+    end
+    
+    subgraph "Backend Layer"
+        Django[Django REST API]
+        Daphne[Daphne ASGI Server]
+        Celery[Celery Worker]
+        Beat[Celery Beat]
+    end
+    
+    subgraph "AI Layer"
+        FastAPI[FastAPI AI Service]
+        OpenAI[OpenAI API]
+        Anthropic[Anthropic API]
+    end
+    
+    subgraph "Data Layer"
+        Postgres[(PostgreSQL)]
+        Redis[(Redis)]
+    end
+    
+    subgraph "Ingestion"
+        Dashboard[Dashboard Upload]
+        Webhook[Twilio Webhook]
+        Email[Email Gateway]
+    end
+    
+    UI -->|HTTP/HTTPS| NGINX
+    Auth -->|JWT Token| NGINX
+    NGINX --> Django
+    NGINX --> Daphne
+    
+    Dashboard --> Django
+    Webhook --> Django
+    Email --> Django
+    
+    Django --> Postgres
+    Django --> Redis
+    Django --> Celery
+    Django --> FastAPI
+    
+    Daphne --> Redis
+    Daphne --> UI
+    
+    Celery --> Redis
+    Celery --> FastAPI
+    
+    Beat --> Redis
+    
+    FastAPI --> OpenAI
+    FastAPI --> Anthropic
+    
+    style UI fill:#4CAF50
+    style Django fill:#2196F3
+    style FastAPI fill:#FF9800
+    style Postgres fill:#9C27B0
+    style Redis fill:#F44336
+```
+
+### Architettura Dettagliata
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Next.js 14    │    │   Django 5      │    │   FastAPI       │
 │   (Frontend)    │◄──►│   (Backend)     │◄──►│   (AI Service)  │
 │   Port: 3000    │    │   Port: 8000    │    │   Port: 8001    │
+│                 │    │                 │    │                 │
+│ - Dashboard     │    │ - REST API      │    │ - OCR + LLM     │
+│ - JWT Auth      │    │ - Admin         │    │ - Extraction    │
+│ - Real-time UI  │    │ - Multi-tenant  │    │ - Classification │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                               │
                               ▼
                        ┌─────────────────┐
                        │   PostgreSQL 16 │
                        │   Port: 5432    │
+                       │                 │
+                       │ - Tenant Data   │
+                       │ - Documents     │
+                       │ - Reconciliations│
                        └─────────────────┘
                               │
                               ▼
                        ┌─────────────────┐
                        │   Redis 7       │
                        │   Port: 6379    │
+                       │                 │
+                       │ - Celery Broker │
+                       │ - Cache         │
+                       │ - SSE Events    │
                        └─────────────────┘
 
 Servizi aggiuntivi:
-- Daphne (ASGI Server): Port 8002 - Real-time updates
-- Celery Worker: Task queue processing
-- Celery Beat: Scheduled tasks
+- Daphne (ASGI Server): Port 8002 - Real-time updates via WebSocket/SSE
+- Celery Worker: Task queue processing for async document processing
+- Celery Beat: Scheduled tasks and periodic jobs
+- Twilio Webhook: Port 8000/api/webhooks/twilio/ - WhatsApp document ingestion
 ```
 
 ## Stack Tecnologico
@@ -229,6 +313,67 @@ Per il deployment in produzione:
 4. Usa volumi persistenti per PostgreSQL e Redis
 5. Configura backup del database
 6. Usa secrets manager per le variabili d'ambiente
+
+## Architecture Decision Records (ADR)
+
+### ADR-001: Multi-tenant Isolation via Middleware
+**Status**: Accepted
+**Context**: Sistema deve supportare multi-tenant con isolamento dati
+**Decision**: Isolamento via middleware Django + query filtering per tenant_id
+**Consequences**:
+- Pro: Semplice implementazione, query automaticamente filtrate
+- Contro: Richiede discipline per non bypassare middleware
+- Alternativa considerata: Schema-per-tenant Postgres (scartata per complessità)
+
+### ADR-002: AI Service as Separate Microservice
+**Status**: Accepted
+**Context**: AI processing richiede dipendenze diverse e scaling indipendente
+**Decision**: FastAPI come microservizio separato da Django
+**Consequences**:
+- Pro: Scaling indipendente, dipendenze isolate, deploy separato
+- Contro: Complessità aggiuntiva, latenza rete
+- Alternativa considerata: Integrazione diretta in Django (scartata per coupling)
+
+### ADR-003: Celery for Async Processing
+**Status**: Accepted
+**Context**: Document processing può richiedere 10-30 secondi
+**Decision**: Celery + Redis per task queue
+**Consequences**:
+- Pro: Scalabile, retry automatico, monitoring
+- Contro: Complessità aggiuntiva, gestione worker
+- Alternativa considerata: Django Background Tasks (scartata per limitazioni)
+
+### ADR-004: JWT with Refresh Token Rotation
+**Status**: Accepted
+**Context**: Auth sicura per SPA con sessioni lunghe
+**Decision**: djangorestframework-simplejwt con access + refresh + rotation
+**Consequences**:
+- Pro: Sicura, standard, rotation automatica
+- Contro: Gestione refresh token client-side
+- Alternativa considerata: Session-based auth (scartata per SPA)
+
+### ADR-005: Server-Sent Events for Real-time Updates
+**Status**: Accepted
+**Context**: Dashboard deve mostrare progresso elaborazione in tempo reale
+**Decision**: Django Channels + Daphne con SSE
+**Consequences**:
+- Pro: Real-time, semplice da implementare
+- Contro: Daphne aggiunge complessità deployment
+- Alternativa considerata: Polling (scartato per inefficienza)
+
+### ADR-006: OpenAI GPT-4o-mini as Default AI Model
+**Status**: Accepted
+**Context**: Bilanciamento costo vs accuratezza
+**Decision**: GPT-4o-mini default, GPT-4o fallback per low-confidence
+**Consequences**:
+- Pro: Costo ridotto, buona accuratezza
+- Contro: Talvolta insufficiente per documenti complessi
+- Alternativa considerata: Claude 3.5 Sonnet default (scartato per costo)
+
+## Documentazione
+
+- **AI Engineering**: Vedi [docs/ai-engineering.md](docs/ai-engineering.md) per prompt eval table, fallback strategy, cost analysis
+- **Twilio Setup**: Vedi [docs/TWILIO_SETUP.md](docs/TWILIO_SETUP.md) per configurazione webhook WhatsApp
 
 ## License
 

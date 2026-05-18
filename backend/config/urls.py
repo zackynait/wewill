@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/tenants/', include('tenants.urls')),
     path('api/documents/', include('documents.urls')),
     path('api/reconciliations/', include('reconciliations.urls')),
+    path('api/webhooks/', include('webhooks.urls')),
 ]
 
 if settings.DEBUG:
