@@ -45,30 +45,3 @@ jobs:
           tags: zaiser98/wewill-nextjs:latest
           cache-from: type=gha
           cache-to: type=gha,mode-max
-      
-      - name: Build Celery Worker
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: zaiser98/wewill-celery-worker:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode-max
-      
-      - name: Build Celery Beat
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: zaiser98/wewill-celery-beat:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode-max
-      
-      - name: Build Daphne
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: zaiser98/wewill-daphne:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode-max
