@@ -1,0 +1,183 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: wewill-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - wewill-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: wewill-redis
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - wewill-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  django:
+    image: zaiser98/wewill-django:latest
+    container_name: wewill-django
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4
+    volumes:
+      - django_static:/app/staticfiles
+      - django_media:/app/mediafiles
+    ports:
+      - "${DJANGO_PORT}:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wewill-network
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  daphne:
+    image: zaiser98/wewill-django:latest
+    container_name: wewill-daphne
+    command: daphne -b 0.0.0.0 -p 8002 config.asgi:application
+    volumes:
+      - django_static:/app/staticfiles
+      - django_media:/app/mediafiles
+    ports:
+      - "${DAPHNE_PORT}:8002"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wewill-network
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  celery-worker:
+    image: zaiser98/wewill-django:latest
+    container_name: wewill-celery-worker
+    command: celery -A config worker --loglevel=info --concurrency=4
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wewill-network
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  celery-beat:
+    image: zaiser98/wewill-django:latest
+    container_name: wewill-celery-beat
+    command: celery -A config beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wewill-network
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  fastapi:
+    image: zaiser98/wewill-fastapi:latest
+    container_name: wewill-fastapi
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    volumes:
+      - django_media:/app/mediafiles
+    ports:
+      - "${FASTAPI_PORT}:8001"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wewill-network
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  nextjs:
+    image: zaiser98/wewill-nextjs:latest
+    container_name: wewill-nextjs
+    command: npm start
+    ports:
+      - "${NEXTJS_PORT}:3000"
+    env_file:
+      - .env
+    depends_on:
+      - django
+      - fastapi
+      - daphne
+    networks:
+      - wewill-network
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: wewill-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_LABEL_ENABLE=true
+    command: --interval 300
+    networks:
+      - wewill-network
+
+networks:
+  wewill-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  django_static:
+  django_media:
