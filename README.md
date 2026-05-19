@@ -4,76 +4,26 @@ Sistema multi-tenant per la riconciliazione automatica di documenti (PDF, CSV/Ex
 
 ## Architettura
 
-### Diagramma Mermaid
+Per l'architettura completa con diagrammi Mermaid dettagliati, flussi di processo e schema database, vedere **[docs/architecture.md](docs/architecture.md)**.
 
-```mermaid
-graph TB
-    subgraph "Frontend Layer"
-        UI[Next.js Dashboard]
-        Auth[JWT Auth Client]
-    end
-    
-    subgraph "API Gateway"
-        NGINX[Nginx Reverse Proxy]
-    end
-    
-    subgraph "Backend Layer"
-        Django[Django REST API]
-        Daphne[Daphne ASGI Server]
-        Celery[Celery Worker]
-        Beat[Celery Beat]
-    end
-    
-    subgraph "AI Layer"
-        FastAPI[FastAPI AI Service]
-        OpenAI[OpenAI API]
-        Anthropic[Anthropic API]
-    end
-    
-    subgraph "Data Layer"
-        Postgres[(PostgreSQL)]
-        Redis[(Redis)]
-    end
-    
-    subgraph "Ingestion"
-        Dashboard[Dashboard Upload]
-        Webhook[Twilio Webhook]
-        Email[Email Gateway]
-    end
-    
-    UI -->|HTTP/HTTPS| NGINX
-    Auth -->|JWT Token| NGINX
-    NGINX --> Django
-    NGINX --> Daphne
-    
-    Dashboard --> Django
-    Webhook --> Django
-    Email --> Django
-    
-    Django --> Postgres
-    Django --> Redis
-    Django --> Celery
-    Django --> FastAPI
-    
-    Daphne --> Redis
-    Daphne --> UI
-    
-    Celery --> Redis
-    Celery --> FastAPI
-    
-    Beat --> Redis
-    
-    FastAPI --> OpenAI
-    FastAPI --> Anthropic
-    
-    style UI fill:#4CAF50
-    style Django fill:#2196F3
-    style FastAPI fill:#FF9800
-    style Postgres fill:#9C27B0
-    style Redis fill:#F44336
-```
+Il documento include:
+- Diagramma architettura generale
+- Flusso completo ingestione documenti
+- Flusso riconciliazione
+- Schema database (ER diagram)
+- Gestione errori e retry
+- Isolamento multi-tenant
+- Architettura deploy
 
-### Architettura Dettagliata
+Per le decisioni architetturali principali, vedere gli **[Architecture Decision Records (ADRs)](docs/adr/)**:
+- [ADR 001: Multi-Tenant Isolation Strategy](docs/adr/001-multi-tenant-isolation.md)
+- [ADR 002: JWT Authentication with Refresh Tokens](docs/adr/002-jwt-authentication.md)
+- [ADR 003: AI Microservice Architecture](docs/adr/003-ai-microservice.md)
+- [ADR 004: Celery Task Queue for Async Processing](docs/adr/004-celery-task-queue.md)
+- [ADR 005: PDF Extraction Hybrid Approach](docs/adr/005-pdf-extraction-hybrid.md)
+- [ADR 006: PostgreSQL + Redis Stack](docs/adr/006-postgresql-redis.md)
+
+### Architettura ad Alto Livello (ASCII)
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐

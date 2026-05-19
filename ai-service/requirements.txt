@@ -8,6 +8,7 @@ pydantic-settings==2.1.0
 pytesseract==0.3.10
 pdf2image==1.16.3
 Pillow==10.1.0
+pdfplumber==0.10.3
 
 # File handling
 openpyxl==3.1.2

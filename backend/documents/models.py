@@ -24,7 +24,7 @@ class Document(TenantMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     file = models.FileField(upload_to='documents/%Y/%m/%d/', verbose_name=_('File'))
     file_type = models.CharField(
-        max_length=10,
+        max_length=50,
         choices=FileType.choices,
         verbose_name=_('File Type')
     )

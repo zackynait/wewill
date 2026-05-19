@@ -20,10 +20,11 @@ class Settings(BaseSettings):
     
     # OpenAI
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_FALLBACK_MODEL: str = "gpt-4o"
     OPENAI_MAX_TOKENS: int = 4096
-    OPENAI_TEMPERATURE: float = 0.1
-    OPENAI_TIMEOUT: int = 120
+    OPENAI_TEMPERATURE: float = 0.0
+    OPENAI_TIMEOUT: int = 300
     
     # Anthropic (fallback)
     ANTHROPIC_API_KEY: str = ""
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     # Processing
     MAX_RETRIES: int = 3
     CONFIDENCE_THRESHOLD: float = 0.7
-    MAX_PAGES_PDF: int = 50
+    MAX_PAGES_PDF: int = 10
     
     # File paths
     DOCUMENTS_PATH: str = "/app/documents"

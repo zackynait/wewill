@@ -64,6 +64,7 @@ class ExtractedDocument(BaseModel):
     classification: DocumentClassification = Field(..., description="Document classification")
     overall_confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Overall extraction confidence")
     processing_notes: List[str] = Field(default_factory=list, description="Notes about processing")
+    requires_manual_review: bool = Field(default=False, description="Whether this document requires manual review")
 
 
 class ProcessRequest(BaseModel):

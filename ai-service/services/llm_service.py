@@ -119,7 +119,7 @@ Rispondi con un JSON in questo formato:
         )
     
     async def extract_from_text(self, text_content: str, classification: DocumentClassification) -> ExtractedDocument:
-        """Extract structured data from text content using LLM."""
+        """Extract structured data from text content using LLM with fallback strategy."""
         
         extraction_prompt = f"""
 Estrai i dati strutturati dal seguente documento di tipo "{classification.type}" in formato tabellare JSON.
@@ -194,81 +194,129 @@ IMPORTANTE:
 - Estrai sempre il nome della banca se presente
 """
         
+        last_error = None
+        processing_notes = []
+        
+        # Strategy 1: Try with default model
         for attempt in range(settings.MAX_RETRIES):
             try:
                 temperature = 0.0 if attempt > 0 else settings.OPENAI_TEMPERATURE
                 
-                if self.openai_client:
-                    response = await self.openai_client.chat.completions.create(
-                        model=settings.OPENAI_MODEL,
-                        messages=[
-                            {"role": "system", "content": "Sei un esperto nell'estrazione di dati da documenti aziendali. Estrai i dati con precisione e assegna confidence scores realistici."},
-                            {"role": "user", "content": extraction_prompt}
-                        ],
-                        temperature=temperature,
-                        max_tokens=settings.OPENAI_MAX_TOKENS,
-                        response_format={"type": "json_object"}
-                    )
-                    
-                    result = json.loads(response.choices[0].message.content)
-                    
-                    # Add classification and calculate overall confidence
-                    lines = result.get("lines", [])
-                    line_confidences = [line.get("confidence", 0.5) for line in lines]
-                    overall_confidence = sum(line_confidences) / len(line_confidences) if line_confidences else 0.5
-                    
+                result = await self._call_llm(extraction_prompt, settings.OPENAI_MODEL, temperature)
+                
+                # Calculate confidence and check threshold
+                lines = result.get("lines", [])
+                line_confidences = [line.get("confidence", 0.5) for line in lines]
+                overall_confidence = sum(line_confidences) / len(line_confidences) if line_confidences else 0.5
+                
+                # If confidence is acceptable, return result
+                if overall_confidence >= settings.CONFIDENCE_THRESHOLD:
                     return ExtractedDocument(
                         **result,
                         classification=classification,
-                        overall_confidence=overall_confidence
+                        overall_confidence=overall_confidence,
+                        processing_notes=processing_notes,
+                        requires_manual_review=False
                     )
-                
-                elif self.anthropic_client:
-                    response = await self.anthropic_client.messages.create(
-                        model=settings.ANTHROPIC_MODEL,
-                        max_tokens=settings.OPENAI_MAX_TOKENS,
-                        temperature=temperature,
-                        messages=[
-                            {"role": "user", "content": extraction_prompt}
-                        ]
-                    )
-                    
-                    result = json.loads(response.content[0].text)
-                    
-                    lines = result.get("lines", [])
-                    line_confidences = [line.get("confidence", 0.5) for line in lines]
-                    overall_confidence = sum(line_confidences) / len(line_confidences) if line_confidences else 0.5
-                    
-                    return ExtractedDocument(
-                        **result,
-                        classification=classification,
-                        overall_confidence=overall_confidence
-                    )
-                
                 else:
-                    raise ValueError("No LLM client configured")
+                    # Low confidence - try fallback model
+                    processing_notes.append(f"Low confidence ({overall_confidence:.2f}) with {settings.OPENAI_MODEL}, trying fallback model")
+                    logger.warning(f"Low confidence {overall_confidence:.2f} with {settings.OPENAI_MODEL}, trying fallback")
+                    break
                     
             except json.JSONDecodeError as e:
-                logger.warning(f"JSON parse error on attempt {attempt + 1}: {e}")
+                logger.warning(f"JSON parse error on attempt {attempt + 1} with {settings.OPENAI_MODEL}: {e}")
+                processing_notes.append(f"JSON parse error attempt {attempt + 1}")
+                last_error = e
                 if attempt == settings.MAX_RETRIES - 1:
-                    raise
+                    break
                 await asyncio.sleep(1)
             except Exception as e:
-                logger.error(f"LLM extraction error on attempt {attempt + 1}: {e}")
+                logger.error(f"LLM extraction error on attempt {attempt + 1} with {settings.OPENAI_MODEL}: {e}")
+                processing_notes.append(f"Error attempt {attempt + 1}: {str(e)}")
+                last_error = e
                 if attempt == settings.MAX_RETRIES - 1:
-                    raise
+                    break
                 await asyncio.sleep(2)
         
-        # Fallback
+        # Strategy 2: Try with fallback model (more powerful)
+        if settings.OPENAI_FALLBACK_MODEL and settings.OPENAI_FALLBACK_MODEL != settings.OPENAI_MODEL:
+            logger.info(f"Trying fallback model: {settings.OPENAI_FALLBACK_MODEL}")
+            processing_notes.append(f"Trying fallback model: {settings.OPENAI_FALLBACK_MODEL}")
+            
+            for attempt in range(2):  # Fewer retries for fallback model
+                try:
+                    result = await self._call_llm(extraction_prompt, settings.OPENAI_FALLBACK_MODEL, 0.0)
+                    
+                    lines = result.get("lines", [])
+                    line_confidences = [line.get("confidence", 0.5) for line in lines]
+                    overall_confidence = sum(line_confidences) / len(line_confidences) if line_confidences else 0.5
+                    
+                    if overall_confidence >= settings.CONFIDENCE_THRESHOLD:
+                        processing_notes.append(f"Success with fallback model (confidence: {overall_confidence:.2f})")
+                        return ExtractedDocument(
+                            **result,
+                            classification=classification,
+                            overall_confidence=overall_confidence,
+                            processing_notes=processing_notes,
+                            requires_manual_review=False
+                        )
+                    else:
+                        # Still low confidence - return partial with manual review flag
+                        processing_notes.append(f"Low confidence even with fallback model ({overall_confidence:.2f})")
+                        return ExtractedDocument(
+                            **result,
+                            classification=classification,
+                            overall_confidence=overall_confidence,
+                            processing_notes=processing_notes,
+                            requires_manual_review=True
+                        )
+                        
+                except Exception as e:
+                    logger.error(f"Fallback model error on attempt {attempt + 1}: {e}")
+                    processing_notes.append(f"Fallback error attempt {attempt + 1}: {str(e)}")
+                    last_error = e
+                    await asyncio.sleep(2)
+        
+        # Strategy 3: Escalation to human review (complete failure)
+        logger.error(f"All extraction strategies failed for document. Last error: {last_error}")
+        processing_notes.append("All extraction strategies failed - requires manual review")
+        
         return ExtractedDocument(
             document_type=classification.type,
             classification=classification,
             overall_confidence=0.0,
-            processing_notes=["Extraction failed after all retries"]
+            processing_notes=processing_notes,
+            requires_manual_review=True
         )
     
+    async def _call_llm(self, prompt: str, model: str, temperature: float) -> dict:
+        """Helper method to call LLM with given model and temperature."""
+        if self.openai_client:
+            response = await self.openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "Sei un esperto nell'estrazione di dati da documenti aziendali. Estrai i dati con precisione e assegna confidence scores realistici."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=temperature,
+                max_tokens=settings.OPENAI_MAX_TOKENS,
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+        elif self.anthropic_client:
+            response = await self.anthropic_client.messages.create(
+                model=model,
+                max_tokens=settings.OPENAI_MAX_TOKENS,
+                temperature=temperature,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return json.loads(response.content[0].text)
+        else:
+            raise ValueError("No LLM client configured")
+    
     async def extract_from_image(self, image_base64: str, classification: DocumentClassification) -> ExtractedDocument:
-        """Extract structured data from image using vision model."""
+        """Extract structured data from image using vision model with fallback strategy."""
         
         vision_prompt = f"""
 Analizza questo documento di tipo "{classification.type}" ed estrai i dati strutturati in formato tabellare.
@@ -340,65 +388,128 @@ IMPORTANTE:
 - Estrai sempre il nome della banca se presente
 """
         
+        last_error = None
+        processing_notes = []
+        
+        # Strategy 1: Try with default model (vision)
         for attempt in range(settings.MAX_RETRIES):
             try:
                 temperature = 0.0 if attempt > 0 else settings.OPENAI_TEMPERATURE
                 
-                if self.openai_client:
-                    response = await self.openai_client.chat.completions.create(
-                        model=settings.OPENAI_MODEL,
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": vision_prompt},
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:image/jpeg;base64,{image_base64}"
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        temperature=temperature,
-                        max_tokens=settings.OPENAI_MAX_TOKENS,
-                        response_format={"type": "json_object"}
+                result = await self._call_llm_vision(vision_prompt, image_base64, settings.OPENAI_MODEL, temperature)
+                
+                # Calculate confidence and check threshold
+                lines = result.get("lines", [])
+                line_confidences = [line.get("confidence", 0.5) for line in lines]
+                overall_confidence = sum(line_confidences) / len(line_confidences) if line_confidences else 0.5
+                
+                # If confidence is acceptable, return result
+                if overall_confidence >= settings.CONFIDENCE_THRESHOLD:
+                    return ExtractedDocument(
+                        **result,
+                        classification=classification,
+                        overall_confidence=overall_confidence,
+                        processing_notes=processing_notes,
+                        requires_manual_review=False
                     )
+                else:
+                    # Low confidence - try fallback model
+                    processing_notes.append(f"Low confidence ({overall_confidence:.2f}) with {settings.OPENAI_MODEL}, trying fallback model")
+                    logger.warning(f"Low confidence {overall_confidence:.2f} with {settings.OPENAI_MODEL}, trying fallback")
+                    break
                     
-                    result = json.loads(response.choices[0].message.content)
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parse error on attempt {attempt + 1} with {settings.OPENAI_MODEL}: {e}")
+                processing_notes.append(f"JSON parse error attempt {attempt + 1}")
+                last_error = e
+                if attempt == settings.MAX_RETRIES - 1:
+                    break
+                await asyncio.sleep(1)
+            except Exception as e:
+                logger.error(f"Vision extraction error on attempt {attempt + 1} with {settings.OPENAI_MODEL}: {e}")
+                processing_notes.append(f"Error attempt {attempt + 1}: {str(e)}")
+                last_error = e
+                if attempt == settings.MAX_RETRIES - 1:
+                    break
+                await asyncio.sleep(2)
+        
+        # Strategy 2: Try with fallback model (more powerful) if it supports vision
+        if settings.OPENAI_FALLBACK_MODEL and settings.OPENAI_FALLBACK_MODEL != settings.OPENAI_MODEL:
+            logger.info(f"Trying fallback model: {settings.OPENAI_FALLBACK_MODEL}")
+            processing_notes.append(f"Trying fallback model: {settings.OPENAI_FALLBACK_MODEL}")
+            
+            for attempt in range(2):  # Fewer retries for fallback model
+                try:
+                    result = await self._call_llm_vision(vision_prompt, image_base64, settings.OPENAI_FALLBACK_MODEL, 0.0)
                     
                     lines = result.get("lines", [])
                     line_confidences = [line.get("confidence", 0.5) for line in lines]
                     overall_confidence = sum(line_confidences) / len(line_confidences) if line_confidences else 0.5
                     
-                    return ExtractedDocument(
-                        **result,
-                        classification=classification,
-                        overall_confidence=overall_confidence
-                    )
-                
-                else:
-                    raise ValueError("Only OpenAI supports vision for now")
-                    
-            except json.JSONDecodeError as e:
-                logger.warning(f"JSON parse error on attempt {attempt + 1}: {e}")
-                if attempt == settings.MAX_RETRIES - 1:
-                    raise
-                await asyncio.sleep(1)
-            except Exception as e:
-                logger.error(f"Vision extraction error on attempt {attempt + 1}: {e}")
-                if attempt == settings.MAX_RETRIES - 1:
-                    raise
-                await asyncio.sleep(2)
+                    if overall_confidence >= settings.CONFIDENCE_THRESHOLD:
+                        processing_notes.append(f"Success with fallback model (confidence: {overall_confidence:.2f})")
+                        return ExtractedDocument(
+                            **result,
+                            classification=classification,
+                            overall_confidence=overall_confidence,
+                            processing_notes=processing_notes,
+                            requires_manual_review=False
+                        )
+                    else:
+                        # Still low confidence - return partial with manual review flag
+                        processing_notes.append(f"Low confidence even with fallback model ({overall_confidence:.2f})")
+                        return ExtractedDocument(
+                            **result,
+                            classification=classification,
+                            overall_confidence=overall_confidence,
+                            processing_notes=processing_notes,
+                            requires_manual_review=True
+                        )
+                        
+                except Exception as e:
+                    logger.error(f"Fallback model error on attempt {attempt + 1}: {e}")
+                    processing_notes.append(f"Fallback error attempt {attempt + 1}: {str(e)}")
+                    last_error = e
+                    await asyncio.sleep(2)
         
-        # Fallback
+        # Strategy 3: Escalation to human review (complete failure)
+        logger.error(f"All vision extraction strategies failed for document. Last error: {last_error}")
+        processing_notes.append("All vision extraction strategies failed - requires manual review")
+        
         return ExtractedDocument(
             document_type=classification.type,
             classification=classification,
             overall_confidence=0.0,
-            processing_notes=["Vision extraction failed after all retries"]
+            processing_notes=processing_notes,
+            requires_manual_review=True
         )
+    
+    async def _call_llm_vision(self, prompt: str, image_base64: str, model: str, temperature: float) -> dict:
+        """Helper method to call LLM with vision capabilities."""
+        if self.openai_client:
+            response = await self.openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                temperature=temperature,
+                max_tokens=settings.OPENAI_MAX_TOKENS,
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+        else:
+            raise ValueError("Only OpenAI supports vision for now")
 
 
 # Singleton instance

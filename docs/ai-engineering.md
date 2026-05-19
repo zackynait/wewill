@@ -78,6 +78,26 @@ async def extract_with_fallback(document):
 
 ## Cost Handling
 
+### Estrazione PDF Ibrida (pdfplumber + Vision API)
+Per ottimizzare i costi, il sistema usa un approccio ibrido per i PDF:
+
+1. **Prima pdfplumber** (gratuito, locale):
+   - Estrae testo dal PDF usando pdfplumber
+   - Veloce e gratuito
+   - Funziona bene per PDF con testo estratto
+
+2. **Valutazione qualità testo**:
+   - Lunghezza minima: 500 caratteri
+   - Pattern matching per verificare contenuto significativo
+   - Se sufficiente → usa LLM text-only (economico)
+
+3. **Fallback Vision API** (costoso ma necessario):
+   - Se pdfplumber fallisce o testo insufficiente
+   - OCR + Vision API per PDF scansionati
+   - ~10x più costoso ma necessario per immagini
+
+**Risparmio stimato**: ~90% per PDF ben formati (testo estratto)
+
 ### Caching su Hash
 - Calcola hash SHA256 del contenuto documento
 - Cache risultati estrazione per 24 ore
@@ -99,9 +119,12 @@ def get_document_hash(file_path):
 | **Tier 3 (Premium)** | Claude 3.5 Sonnet | $0.003 / $0.015 | Low-confidence, escalation |
 
 ### Stima Costo per Documento
-- **PDF medio (1 pagina)**: ~2000 tokens input, ~500 tokens output
-  - GPT-4o-mini: $0.0006 (input) + $0.0003 (output) = **$0.0009**
-  - GPT-4o: $0.01 (input) + $0.0075 (output) = **$0.0175**
+- **PDF medio (1 pagina, testo estratto)**: pdfplumber (gratis) + LLM text-only
+  - GPT-4o-mini: ~1500 tokens input, ~400 tokens output = **$0.0006**
+  - GPT-4o: ~1500 tokens input, ~400 tokens output = **$0.012**
+- **PDF scansionato (1 pagina)**: OCR + Vision API
+  - GPT-4o-mini: ~2000 tokens input (image), ~500 tokens output = **$0.009**
+  - GPT-4o: ~2000 tokens input (image), ~500 tokens output = **$0.0175**
 - **CSV medio (100 righe)**: ~3000 tokens input, ~800 tokens output
   - GPT-4o-mini: $0.0009 + $0.00048 = **$0.00138**
   - GPT-4o: $0.015 + $0.012 = **$0.027**

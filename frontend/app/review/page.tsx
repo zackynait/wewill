@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import api from '@/lib/api';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 interface Discrepancy {
   id: string;
   field_name: string;
@@ -103,7 +105,7 @@ export default function ReviewPage() {
     
     try {
       await api.post(`/reconciliations/jobs/${job.id}/complete_review/`);
-      router.push('/dashboard');
+      router.push(`/final-report?job_id=${job.id}`);
     } catch (err: any) {
       alert('Errore nel completamento della revisione: ' + err.message);
     }
@@ -191,11 +193,43 @@ export default function ReviewPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <div className="text-sm text-gray-500">Documento 1</div>
-                <div className="font-medium">{job.document_1.filename}</div>
+                <div className="font-medium mb-1">{job.document_1.filename}</div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(`${API_URL}/api/documents/${job.document_1.id}/view/`, '_blank')}
+                  >
+                    👁️ Visiona
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(`${API_URL}/api/documents/${job.document_1.id}/download/`)}
+                  >
+                    📥 Scarica
+                  </Button>
+                </div>
               </div>
               <div>
                 <div className="text-sm text-gray-500">Documento 2</div>
-                <div className="font-medium">{job.document_2.filename}</div>
+                <div className="font-medium mb-1">{job.document_2.filename}</div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(`${API_URL}/api/documents/${job.document_2.id}/view/`, '_blank')}
+                  >
+                    👁️ Visiona
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(`${API_URL}/api/documents/${job.document_2.id}/download/`)}
+                  >
+                    📥 Scarica
+                  </Button>
+                </div>
               </div>
               <div>
                 <div className="text-sm text-gray-500">Scenario</div>

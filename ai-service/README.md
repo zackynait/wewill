@@ -8,17 +8,34 @@ Microservizio FastAPI per l'elaborazione di documenti con AI (OCR + LLM extracti
 
 - **FastAPI**: Framework ASGI per API REST
 - **LLM Service**: Gestisce chiamate a OpenAI/Anthropic con retry logic
-- **PDF Processor**: Converte PDF in immagini + extraction con vision model
+- **PDF Processor**: Estrazione testo ibrida pdfplumber + vision fallback
 - **CSV/Excel Processor**: Parsing intelligente con detection automatico
 - **Pydantic Models**: Validazione e structured output
 
-### Pipeline PDF
+### Pipeline PDF (Approccio Ibrido)
 
-1. **Conversione**: pdf2image converte pagine PDF in immagini
-2. **Classificazione**: LLM classifica il tipo di documento
-3. **Estrazione**: GPT-4o Vision estrae dati strutturati con JSON schema
-4. **Retry**: Automatic retry con temperature=0 se JSON malformato (max 3 tentativi)
-5. **Confidence**: Score per campo e globale 0-1
+1. **Estrazione Testo pdfplumber** (primo tentativo, gratuito):
+   - Estrae testo dal PDF usando pdfplumber
+   - Veloce e non richiede API esterne
+   - Funziona bene per PDF con testo estratto
+
+2. **Valutazione Qualità**:
+   - Lunghezza minima: 500 caratteri
+   - Pattern matching per contenuto significativo
+   - Se sufficiente → usa LLM text-only (economico)
+
+3. **Classificazione**: LLM classifica il tipo di documento dal testo
+
+4. **Estrazione**: LLM text-only estrae dati strutturati con JSON schema
+
+5. **Fallback OCR + Vision** (se pdfplumber insufficiente):
+   - pdf2image converte pagine PDF in immagini
+   - GPT-4o Vision estrae dati con JSON schema
+   - ~10x più costoso ma necessario per PDF scansionati
+
+6. **Retry**: Automatic retry con temperature=0 se JSON malformato (max 3 tentativi)
+
+7. **Confidence**: Score per campo e globale 0-1
 
 ### Pipeline CSV/Excel
 

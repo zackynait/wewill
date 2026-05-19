@@ -10,7 +10,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'tenant', 'file', 'file_type', 'status',
             'uploaded_at', 'processed_at', 'extracted_data',
-            'error_message', 'filename'
+            'error_message', 'filename', 'source', 'source_metadata'
         ]
         read_only_fields = ['id', 'uploaded_at', 'processed_at', 'filename']
 

@@ -13,6 +13,7 @@ interface Document {
   file_type: string;
   status: string;
   uploaded_at: string;
+  source: string;
   extracted_data?: any;
 }
 
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
 
   useEffect(() => {
     // Check authentication
@@ -69,6 +71,15 @@ export default function DashboardPage() {
       setDocuments(response.data.results || response.data);
     } catch (error) {
       console.error('Failed to fetch documents:', error);
+    }
+  };
+
+  const handleDocumentClick = async (doc: Document) => {
+    try {
+      const response = await api.get(`/documents/${doc.id}/`);
+      setSelectedDocument(response.data);
+    } catch (error) {
+      console.error('Failed to fetch document details:', error);
     }
   };
 
@@ -339,26 +350,26 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
+      <header className="bg-white/10 backdrop-blur-lg border-b border-white/20 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-500 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/30">
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
                 WeWill
               </h1>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => router.push('/monitoring')} variant="outline">
+              <Button onClick={() => router.push('/monitoring')} variant="outline" className="border-white/20 text-white hover:bg-white/10">
                 Monitoraggio
               </Button>
-              <Button onClick={handleLogout} variant="outline">
+              <Button onClick={handleLogout} variant="outline" className="border-white/20 text-white hover:bg-white/10">
                 Logout
               </Button>
             </div>
@@ -367,42 +378,42 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Wizard Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <div className={`flex items-center ${step === 'upload' ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'upload' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
+            <div className={`flex items-center ${step === 'upload' ? 'text-cyan-400' : 'text-gray-500'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'upload' ? 'bg-gradient-to-r from-cyan-500 to-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-white/10'}`}>
                 1
               </div>
-              <span className="ml-2 font-medium">Carica Documenti</span>
+              <span className="ml-2 font-medium text-white">Carica Documenti</span>
             </div>
-            <div className={`flex-1 h-1 mx-4 ${step === 'analyze' || step === 'review' ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-            <div className={`flex items-center ${step === 'analyze' ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'analyze' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
+            <div className={`flex-1 h-1 mx-4 ${step === 'analyze' || step === 'review' ? 'bg-gradient-to-r from-cyan-500 to-purple-500' : 'bg-white/10'}`}></div>
+            <div className={`flex items-center ${step === 'analyze' ? 'text-cyan-400' : 'text-gray-500'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'analyze' ? 'bg-gradient-to-r from-cyan-500 to-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-white/10'}`}>
                 2
               </div>
-              <span className="ml-2 font-medium">Analisi</span>
+              <span className="ml-2 font-medium text-white">Analisi</span>
             </div>
-            <div className={`flex-1 h-1 mx-4 ${step === 'review' ? 'bg-blue-600' : 'bg-gray-200'}`}></div>
-            <div className={`flex items-center ${step === 'review' ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'review' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
+            <div className={`flex-1 h-1 mx-4 ${step === 'review' ? 'bg-gradient-to-r from-cyan-500 to-purple-500' : 'bg-white/10'}`}></div>
+            <div className={`flex items-center ${step === 'review' ? 'text-cyan-400' : 'text-gray-500'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'review' ? 'bg-gradient-to-r from-cyan-500 to-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-white/10'}`}>
                 3
               </div>
-              <span className="ml-2 font-medium">Revisione</span>
+              <span className="ml-2 font-medium text-white">Revisione</span>
             </div>
           </div>
         </div>
 
         {/* Step 1: Upload */}
         {step === 'upload' && (
-          <Card className="border-0 shadow-lg">
+          <Card className="bg-white/10 backdrop-blur-lg border-0 shadow-2xl shadow-purple-500/20">
             <CardHeader>
-              <CardTitle className="text-2xl">Carica 2 Documenti</CardTitle>
-              <CardDescription>Seleziona 2 documenti (PDF, CSV, Excel) da riconciliare</CardDescription>
+              <CardTitle className="text-2xl text-white">Carica 2 Documenti</CardTitle>
+              <CardDescription className="text-cyan-300">Seleziona 2 documenti (PDF, CSV, Excel) da riconciliare</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-500 transition-colors">
+              <div className="border-2 border-dashed border-white/20 rounded-xl p-12 text-center hover:border-cyan-500/50 transition-colors bg-white/5 hover:bg-white/10">
                 <input
                   type="file"
                   multiple
@@ -413,13 +424,13 @@ export default function DashboardPage() {
                 />
                 <label htmlFor="file-upload" className="cursor-pointer">
                   <div className="flex flex-col items-center">
-                    <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-16 h-16 text-cyan-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
-                    <p className="text-lg font-medium text-gray-700 mb-2">
+                    <p className="text-lg font-medium text-white mb-2">
                       {selectedFiles.length > 0 ? `${selectedFiles.length} file selezionati` : 'Clicca per selezionare i file'}
                     </p>
-                    <p className="text-sm text-gray-500">PDF, CSV, Excel supportati</p>
+                    <p className="text-sm text-cyan-300">PDF, CSV, Excel supportati</p>
                   </div>
                 </label>
               </div>
@@ -427,26 +438,26 @@ export default function DashboardPage() {
               {selectedFiles.length > 0 && (
                 <div className="mt-6 space-y-2">
                   {selectedFiles.map((file, index) => (
-                    <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div key={index} className="flex items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10">
+                      <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      <span className="text-sm font-medium">{file.name}</span>
+                      <span className="text-sm font-medium text-white">{file.name}</span>
                     </div>
                   ))}
                 </div>
               )}
 
               {error && (
-                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800">{error}</p>
+                <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <p className="text-sm text-red-300">{error}</p>
                 </div>
               )}
 
               <Button
                 onClick={handleUpload}
                 disabled={selectedFiles.length !== 2 || loading}
-                className="w-full mt-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="w-full mt-6 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 shadow-lg shadow-purple-500/30"
               >
                 {loading ? 'Elaborazione in corso...' : 'Avvia Analisi'}
               </Button>
@@ -870,6 +881,134 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* All Documents Section */}
+        {documents.length > 0 && (
+          <Card className="bg-white/10 backdrop-blur-lg border-0 shadow-2xl shadow-purple-500/20 mt-8">
+            <CardHeader>
+              <CardTitle className="text-xl text-white">Tutti i Documenti</CardTitle>
+              <CardDescription className="text-cyan-300">Documenti ricevuti da dashboard, webhook, WhatsApp, etc.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-white/5">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-cyan-300">Filename</th>
+                      <th className="px-3 py-2 text-left font-medium text-cyan-300">Tipo</th>
+                      <th className="px-3 py-2 text-left font-medium text-cyan-300">Status</th>
+                      <th className="px-3 py-2 text-left font-medium text-cyan-300">Source</th>
+                      <th className="px-3 py-2 text-left font-medium text-cyan-300">Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc) => (
+                      <tr 
+                        key={doc.id} 
+                        className="border-t border-white/10 cursor-pointer hover:bg-white/10 transition-colors"
+                        onClick={() => handleDocumentClick(doc)}
+                      >
+                        <td className="px-3 py-2 text-white">{doc.filename || 'N/A'}</td>
+                        <td className="px-3 py-2 text-cyan-300">{doc.file_type}</td>
+                        <td className="px-3 py-2">
+                          <Badge className={
+                            doc.status === 'done' ? 'bg-green-500/20 text-green-300' :
+                            doc.status === 'processing' ? 'bg-blue-500/20 text-blue-300' :
+                            doc.status === 'error' ? 'bg-red-500/20 text-red-300' :
+                            'bg-gray-500/20 text-gray-300'
+                          }>
+                            {doc.status}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">{doc.source || 'dashboard'}</Badge>
+                        </td>
+                        <td className="px-3 py-2 text-cyan-300">{new Date(doc.uploaded_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Document Details Modal */}
+        {selectedDocument && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-gradient-to-br from-slate-900 to-purple-900 rounded-2xl shadow-2xl shadow-purple-500/50 max-w-4xl w-full max-h-[90vh] overflow-hidden border border-white/20">
+              <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-white">Dettagli Documento</h2>
+                <Button onClick={() => setSelectedDocument(null)} variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10">
+                  Chiudi
+                </Button>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-cyan-300">Filename:</span>
+                      <span className="ml-2 text-white">{selectedDocument.filename || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-cyan-300">Tipo:</span>
+                      <span className="ml-2 text-white">{selectedDocument.file_type}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-cyan-300">Status:</span>
+                      <span className="ml-2">
+                        <Badge className={
+                          selectedDocument.status === 'done' ? 'bg-green-500/20 text-green-300' :
+                          selectedDocument.status === 'processing' ? 'bg-blue-500/20 text-blue-300' :
+                          selectedDocument.status === 'error' ? 'bg-red-500/20 text-red-300' :
+                          'bg-gray-500/20 text-gray-300'
+                        }>
+                          {selectedDocument.status}
+                        </Badge>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-cyan-300">Source:</span>
+                      <span className="ml-2">
+                        <Badge variant="outline" className="font-semibold border-cyan-500/30 text-cyan-300">
+                          {selectedDocument.source || 'dashboard'}
+                        </Badge>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-cyan-300">Caricato:</span>
+                      <span className="ml-2 text-white">{new Date(selectedDocument.uploaded_at).toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-cyan-300">Elaborato:</span>
+                      <span className="ml-2 text-white">{selectedDocument.processed_at ? new Date(selectedDocument.processed_at).toLocaleString() : 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {selectedDocument.error_message && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                      <p className="font-medium text-red-300">Errore:</p>
+                      <p className="text-sm text-red-200">{selectedDocument.error_message}</p>
+                    </div>
+                  )}
+
+                  {selectedDocument.file_type === 'pdf' && selectedDocument.file && (
+                    <div className="mt-4">
+                      <h3 className="font-medium text-cyan-300 mb-2">Anteprima PDF</h3>
+                      <div className="bg-white/5 border border-white/10 rounded-lg overflow-hidden" style={{ height: '500px' }}>
+                        <iframe
+                          src={`http://localhost:8000${selectedDocument.file}`}
+                          className="w-full h-full"
+                          title="PDF Preview"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>

@@ -224,6 +224,10 @@ CORS_ALLOW_CREDENTIALS = True
 FASTAPI_HOST = env('FASTAPI_HOST', default='fastapi')
 FASTAPI_PORT = env('FASTAPI_PORT', default='8001')
 
+# Twilio Configuration
+TWILIO_ACCOUNT_SID = env('TWILIO_ACCOUNT_SID', default='')
+TWILIO_AUTH_TOKEN = env('TWILIO_AUTH_TOKEN', default='')
+
 # File upload settings
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
@@ -252,6 +256,11 @@ LOGGING = {
         'django': {
             'handlers': ['console'],
             'level': env('DJANGO_LOG_LEVEL', default='INFO'),
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console'],
+            'level': 'ERROR',  # Only log actual security errors, not CSRF failures from probes
             'propagate': False,
         },
         'celery': {

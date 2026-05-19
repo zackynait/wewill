@@ -49,11 +49,13 @@ def twilio_whatsapp_webhook(request):
             
             logger.info(f"Processing media {i}: {media_type} from {media_url}")
             
-            # Download the media file
+            # Download the media file with Twilio authentication
             try:
-                response = requests.get(media_url, timeout=30)
+                from django.conf import settings
+                twilio_auth = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+                response = requests.get(media_url, auth=twilio_auth, timeout=30)
                 if response.status_code != 200:
-                    logger.error(f"Failed to download media from {media_url}")
+                    logger.error(f"Failed to download media from {media_url}: Status {response.status_code}")
                     continue
                 
                 # Determine file extension from content type
@@ -78,11 +80,20 @@ def twilio_whatsapp_webhook(request):
                 
                 file_content = ContentFile(response.content)
                 
+                # Map MIME type to file_type enum
+                if media_type == 'application/pdf':
+                    file_type = 'pdf'
+                elif media_type in ['text/csv', 'application/csv']:
+                    file_type = 'csv'
+                elif media_type in ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']:
+                    file_type = 'xlsx'
+                else:
+                    file_type = 'pdf'  # Default fallback
+                
                 # Create document record
                 document = Document.objects.create(
                     tenant=tenant,
-                    filename=filename,
-                    file_type=media_type,
+                    file_type=file_type,
                     status='pending',
                     uploaded_at=timezone.now(),
                     source='whatsapp',
@@ -117,7 +128,6 @@ def twilio_whatsapp_webhook(request):
             
             document = Document.objects.create(
                 tenant=tenant,
-                filename=filename,
                 file_type='text/plain',
                 status='pending',
                 uploaded_at=timezone.now(),
@@ -172,11 +182,24 @@ def mock_webhook(request):
         uploaded_file = request.FILES['file']
         source = request.POST.get('source', 'mock')
         
+        # Map MIME type to file_type enum
+        content_type = uploaded_file.content_type
+        if 'pdf' in content_type:
+            file_type = 'pdf'
+        elif 'csv' in content_type or content_type in ['text/csv', 'application/csv']:
+            file_type = 'csv'
+        elif 'sheet' in content_type or 'excel' in content_type or content_type in [
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel'
+        ]:
+            file_type = 'xlsx'
+        else:
+            file_type = 'pdf'  # Default fallback
+        
         # Create document record
         document = Document.objects.create(
             tenant=tenant,
-            filename=uploaded_file.name,
-            file_type=uploaded_file.content_type,
+            file_type=file_type,
             status='pending',
             uploaded_at=timezone.now(),
             source=source,

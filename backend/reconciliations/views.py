@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.http import FileResponse, Http404
 from config.permissions import IsTenantUser
 from .models import ReconciliationJob, Discrepancy, AuditLog
 from .serializers import (
@@ -80,6 +81,96 @@ class ReconciliationJobViewSet(viewsets.ModelViewSet):
             {'message': 'Revisione completata con successo'},
             status=status.HTTP_200_OK
         )
+    
+    @action(detail=True, methods=['get'])
+    def final_report(self, request, pk=None):
+        """Generate final report with unified document and summary."""
+        job = self.get_object()
+        
+        # Get all discrepancies with their final decisions
+        discrepancies = job.discrepancies.all()
+        
+        # Build unified document based on decisions
+        unified_data = self._build_unified_document(job, discrepancies)
+        
+        # Build summary
+        summary = self._build_summary(discrepancies)
+        
+        # Get document file info
+        doc1_info = self._get_document_info(job.document_1)
+        doc2_info = self._get_document_info(job.document_2)
+        
+        return Response({
+            'job_id': str(job.id),
+            'scenario': job.scenario,
+            'unified_document': unified_data,
+            'summary': summary,
+            'documents': {
+                'document_1': doc1_info,
+                'document_2': doc2_info
+            },
+            'completed_at': job.completed_at
+        })
+    
+    def _build_unified_document(self, job, discrepancies):
+        """Build unified document based on discrepancy decisions."""
+        # Start with document 1 as base
+        unified = job.document_1.extracted_data.copy() if job.document_1.extracted_data else {}
+        
+        # Apply decisions from discrepancies
+        for discrepancy in discrepancies:
+            if discrepancy.status == 'approved':
+                # Use the approved value (doc1 or doc2 based on decision)
+                if discrepancy.operator_note and 'doc2' in discrepancy.operator_note.lower():
+                    unified[discrepancy.field_name] = discrepancy.doc2_value
+                else:
+                    unified[discrepancy.field_name] = discrepancy.doc1_value
+            elif discrepancy.status == 'corrected' and discrepancy.operator_note:
+                # Use manually corrected value
+                unified[discrepancy.field_name] = discrepancy.operator_note
+            elif discrepancy.status == 'rejected':
+                # Keep doc1 value (default)
+                unified[discrepancy.field_name] = discrepancy.doc1_value
+        
+        # Add metadata about decisions
+        unified['_metadata'] = {
+            'source_document': 'document_1',
+            'decisions_applied': discrepancies.count(),
+            'approved_count': discrepancies.filter(status='approved').count(),
+            'corrected_count': discrepancies.filter(status='corrected').count(),
+            'rejected_count': discrepancies.filter(status='rejected').count()
+        }
+        
+        return unified
+    
+    def _build_summary(self, discrepancies):
+        """Build summary of decisions."""
+        return {
+            'total_discrepancies': discrepancies.count(),
+            'approved': discrepancies.filter(status='approved').count(),
+            'corrected': discrepancies.filter(status='corrected').count(),
+            'rejected': discrepancies.filter(status='rejected').count(),
+            'pending': discrepancies.filter(status='pending').count(),
+            'discrepancy_types': {
+                'missing': discrepancies.filter(discrepancy_type='missing').count(),
+                'changed': discrepancies.filter(discrepancy_type='changed').count(),
+                'equivalent_different': discrepancies.filter(discrepancy_type='equivalent_different').count()
+            }
+        }
+    
+    def _get_document_info(self, document):
+        """Get document info for download/view."""
+        if not document:
+            return None
+        
+        return {
+            'id': str(document.id),
+            'file_type': document.file_type,
+            'status': document.status,
+            'uploaded_at': document.uploaded_at.isoformat() if document.uploaded_at else None,
+            'download_url': f'/api/documents/{document.id}/download/',
+            'view_url': f'/api/documents/{document.id}/view/'
+        }
 
 
 class DiscrepancyViewSet(viewsets.ModelViewSet):
